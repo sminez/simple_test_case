@@ -1,7 +1,7 @@
 //! # Test helpers should be simple.
 //!
 //! You don't want to have to worry about bugs in your test suite or unexpected behaviour leading
-//! to failing tests silently passing. With that in mind, `simpl_test_case` aims to do the bare
+//! to failing tests silently passing. With that in mind, `simple_test_case` aims to do the bare
 //! minimum to eliminate the boilerplate of writing parameterised tests and no more.
 //!
 //! The `test_case` attribute macro handles generating multiple test functions for you which are
@@ -55,7 +55,7 @@
 //!
 //! ## Additional attributes
 //!
-//! `test_case` preserves all attributes beneath it, forwarding them on to the idividual generated
+//! `test_case` preserves all attributes beneath it, forwarding them on to the individual generated
 //! test functions. As an example, the standard library `should_panic` attribute works just fine as
 //! shown below (just make sure to provide your test cases first as described above):
 //!
