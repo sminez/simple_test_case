@@ -1,4 +1,4 @@
-//! A simple test case attribute macro that lets you write parameterised tests
+//! A simple attribute macro that lets you easily write parameterised tests
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::{quote, ToTokens};
@@ -10,13 +10,14 @@ use syn::{
     Attribute, Error, Expr, FnArg, ItemFn, LitStr, PatType, Result, Stmt, Token,
 };
 
+// A really simple test case specification of the form: test_case(exprs, ...; "name for test case")
+// There is no defaulting of the case name or additional properties that can be set.
 struct TestCase {
     args: Punctuated<Expr, Token![,]>,
     name: LitStr,
     span: Span,
 }
 
-// #[test_case(1, 3.14, "foo"; "this is a test case")]
 impl Parse for TestCase {
     fn parse(input: ParseStream<'_>) -> syn::parse::Result<Self> {
         let span = input.span();
@@ -28,11 +29,55 @@ impl Parse for TestCase {
     }
 }
 
-/// Parameterise a test with multiple input values.
+/// Parameterise a test with multiple sets of input values.
+///
+/// `test_case` handles generating multiple test functions for you which are parameterised by the
+/// inputs you provide. You still need to provide the `#[test]` attribute (or an alternative such
+/// as `#[tokio::test]`) and all test cases _must_ be provided before any additional attribute
+/// macros you wish to apply.
+///
+/// And that's it. There is no additional support for custom assertions, fixtures etc.
+///
+///
+/// ### Valid
+/// Here the `#[test]` attribute is provided after all instances of `test_case`. This will work.
+/// ```rust
+/// use simple_test_case::test_case;
+///
+/// fn double(n: usize) -> usize {
+///     n * 2
+/// }
+///
+/// #[test_case(1, 2; "case 1")]
+/// #[test_case(3, 6; "case 2")]
+/// #[test]
+/// fn double_test(n: usize, double: usize) {
+///     assert_eq!(double(n), double)
+/// }
+/// ```
+///
+/// ### Invalid
+/// Here the `#[test]` attribute is provided before all instances of `test_case`. This will cause
+/// the compiler to complain about functions used as tests not being allowed to have any arguments.
+/// ```ignore
+/// use simple_test_case::test_case;
+///
+/// fn double(n: usize) -> usize {
+///     n * 2
+/// }
+///
+/// #[test]
+/// #[test_case(1, 2; "case 1")]
+/// #[test_case(3, 6; "case 2")]
+/// fn double_test(n: usize, double: usize) {
+///     assert_eq!(double(n), double)
+/// }
+/// ```
 #[proc_macro_attribute]
 pub fn test_case(args: TokenStream, input: TokenStream) -> TokenStream {
     let mut original = parse_macro_input!(input as ItemFn);
     let first_case = parse_macro_input!(args as TestCase);
+    let module = original.sig.ident.clone();
 
     // We should be the first test_case attribute, but there may be others beneath us so walk
     // through the attributes and parse any other test_cases we find
@@ -47,12 +92,10 @@ pub fn test_case(args: TokenStream, input: TokenStream) -> TokenStream {
         original.attrs.swap_remove(i);
     }
 
-    // For rendering we use the original function name as a module and snake_case convert the case
-    // names we've been given to generate the new test case names.
-    // Any existing attrs _other_ than ours are preserved and the original function is updated for
-    // each case to bind the function parameters explicitly at the top;
-    let module = original.sig.ident.clone();
-    let resolved_cases = resolve_test_cases(original, cases);
+    let resolved_cases: Vec<_> = cases
+        .into_iter()
+        .map(|c| resolve_test_case(original.clone(), c))
+        .collect();
 
     TokenStream::from(quote! {
         mod #module {
@@ -64,7 +107,9 @@ pub fn test_case(args: TokenStream, input: TokenStream) -> TokenStream {
     })
 }
 
-fn extract_other_cases(cases: &mut Vec<TestCase>, attrs: &[Attribute]) -> syn::Result<Vec<usize>> {
+// Glob up any other `test_case` attribute macros underneath us and parse them as additional
+// cases that we will handle generating.
+fn extract_other_cases(cases: &mut Vec<TestCase>, attrs: &[Attribute]) -> Result<Vec<usize>> {
     let test_case_attr = parse_quote!(test_case);
     let qualified_test_case_attr = parse_quote!(simple_test_case::test_case);
 
@@ -85,24 +130,22 @@ fn extract_other_cases(cases: &mut Vec<TestCase>, attrs: &[Attribute]) -> syn::R
         .collect()
 }
 
-fn resolve_test_cases(original: ItemFn, cases: Vec<TestCase>) -> Vec<proc_macro2::TokenStream> {
-    cases
-        .into_iter()
-        .map(|c| resolve_test_case(original.clone(), c))
-        .collect()
-}
-
+// For rendering we use the original function name as a module and snake_case convert the case
+// names we've been given to generate the new test case names. Any existing attrs _other_ than ours
+// are preserved and the original function is updated for each case to bind the function parameters
+// explicitly at the top.
 fn resolve_test_case(mut _fn: ItemFn, case: TestCase) -> proc_macro2::TokenStream {
     let TestCase { span, args, name } = case;
-
-    // TODO: need to move the args from the sig into the new body Block
-    _fn.sig.ident = slugify_ident(name);
     let inputs = _fn.sig.inputs.clone();
-    _fn.sig.inputs.clear();
 
+    // Explicitly bail on mismatched number of arguments rather than silently dropping from the
+    // shorter side of the `zip` used for generating the variable bindings.
     if args.len() != inputs.len() {
         return Error::new(span, "wrong number of arguments").into_compile_error();
     }
+
+    // Strip the original function arguments so that `_fn` will be valid as a test function
+    _fn.sig.inputs.clear();
 
     let res: Result<Vec<Stmt>> = inputs
         .iter()
@@ -120,7 +163,7 @@ fn resolve_test_case(mut _fn: ItemFn, case: TestCase) -> proc_macro2::TokenStrea
                 }
             }
 
-            _ => Err(Error::new_spanned(
+            FnArg::Receiver(_) => Err(Error::new_spanned(
                 fnarg,
                 "self is not permitted for test cases",
             )),
@@ -128,17 +171,24 @@ fn resolve_test_case(mut _fn: ItemFn, case: TestCase) -> proc_macro2::TokenStrea
         .collect();
 
     match res {
+        // Add variable bindings (in place of function parameters) to the top of the function body
+        // and set the name of this test case to be the one we were given
         Ok(mut stmts) => {
             let as_written = _fn.block.stmts.clone();
             stmts.extend(as_written);
             _fn.block.stmts = stmts;
+            _fn.sig.ident = slugify_ident(name);
+
             _fn.into_token_stream()
         }
+
+        // Something was invalid (in terms of what we support) about the original function args so
+        // report the error and bail
         Err(e) => e.into_compile_error(),
     }
 }
 
-// assume no non-alphanumeric and no leading digits
+// assumes no non-alphanumeric characters and no leading digits
 fn slugify_ident(name: LitStr) -> Ident {
     Ident::new(
         &name.value().to_ascii_lowercase().replace(' ', "_"),
