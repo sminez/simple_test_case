@@ -1,7 +1,15 @@
 [package]
 name = "simple_test_case"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
+authors = ["sminez <innes.andersonmorrison@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/sminez/simple_test_case"
+documentation = "https://docs.rs/simple_test_case"
+readme = "README.md"
+description = "A bare bones attribute macro for writing parameterised tests"
+keywords      = ["test", "case", "tests", "unit", "testing", "testcase", "test_case"]
+categories    = ["development-tools", "development-tools::testing"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -11,8 +19,8 @@ proc-macro = true
 [dependencies]
 proc-macro2 = "1.0.36"
 quote = "1.0.15"
-syn = { version = "1.0.86", features = ["fold", "full"] }
+syn = { version = "1.0.86", features = ["full"] }
 
 [dev-dependencies]
-syn = { version = "1.0.86", features = ["fold", "full", "extra-traits"] }
-tokio = { version = "1.7.1", features = ["rt", "macros", "rt-multi-thread"] }
+syn = { version = "1.0.86", features = ["full", "extra-traits"] }
+tokio = { version = "1.16.1", features = ["rt", "macros", "rt-multi-thread"] }
