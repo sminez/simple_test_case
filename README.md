@@ -38,7 +38,7 @@ fn double_test(n: usize, double: usize) {
 ### Invalid
 Here the `#[test]` attribute is provided before all instances of `test_case`. This will cause
 the compiler to complain about functions used as tests not being allowed to have any arguments.
-```ignore
+```rust
 use simple_test_case::test_case;
 
 fn double(n: usize) -> usize {
