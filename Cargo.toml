@@ -8,7 +8,7 @@ repository = "https://github.com/sminez/simple_test_case"
 documentation = "https://docs.rs/simple_test_case"
 readme = "README.md"
 description = "A bare bones attribute macro for writing parameterised tests"
-keywords      = ["test", "case", "tests", "unit", "testing", "testcase", "test_case"]
+keywords      = ["test", "case", "testing", "testcase", "unittest"]
 categories    = ["development-tools", "development-tools::testing"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
