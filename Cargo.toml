@@ -22,4 +22,5 @@ quote = "1.0.15"
 syn = { version = "1.0.86", features = ["full", "extra-traits"] }
 
 [dev-dependencies]
+anyhow = "1.0.53"
 tokio = { version = "1.16.1", features = ["rt", "macros", "rt-multi-thread"] }

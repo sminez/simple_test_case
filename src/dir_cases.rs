@@ -7,12 +7,6 @@ use syn::{
     parse_macro_input, Error, ItemFn, LitStr,
 };
 
-// #[dir_cases("./resources")]
-// #[test]
-// fn dir_doubles(path: &str, contents: &str) -> Result<(), serde_json::Error> {
-//     let d: Data = serde_json::from_str(contents)?;
-//     assert_eq!(double(d.num), d.expected);
-// }
 struct DirCases {
     span: Span,
     dir: String,
@@ -39,8 +33,8 @@ fn get_cases(dir: &str) -> Result<Vec<(String, String, String)>, std::io::Error>
         if path.is_file() {
             let contents = read_to_string(path)?;
             let fname = entry.file_name().into_string().unwrap();
-            let case = slugify_path(&format!("{}/{}", dir, fname));
-            cases.push((fname, case, contents));
+            let case = slugify_path(&fname);
+            cases.push((format!("{}/{}", dir, fname), case, contents));
         }
     }
 
