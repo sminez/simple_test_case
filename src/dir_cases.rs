@@ -4,7 +4,7 @@ use quote::quote;
 use std::fs::{read_dir, read_to_string};
 use syn::{
     parse::{Parse, ParseStream},
-    parse_macro_input, Error, ItemFn, LitStr,
+    parse_macro_input, parse_quote, Error, FnArg, ItemFn, LitStr, Type,
 };
 
 struct DirCases {
@@ -49,11 +49,27 @@ fn slugify_path(p: &str) -> String {
         .replace('/', "_")
 }
 
-// fn has_correct_args() -> bool
+fn has_correct_args(_fn: &ItemFn) -> bool {
+    let str_ty: Type = parse_quote!(&str);
+    let valid = |fnarg: &FnArg| matches!(fnarg, FnArg::Typed(pt) if *pt.ty == str_ty);
+
+    _fn.sig.inputs.len() == 2 && _fn.sig.inputs.iter().all(valid)
+}
 
 pub(crate) fn inner(args: TokenStream, input: TokenStream) -> TokenStream {
     let DirCases { span, dir } = parse_macro_input!(args as DirCases);
     let original = parse_macro_input!(input as ItemFn);
+
+    if !has_correct_args(&original) {
+        return TokenStream::from(
+            Error::new(
+                span,
+                "dir_cases test functions must accept (path: &str, contents: &str) as arguments"
+                    .to_string(),
+            )
+            .into_compile_error(),
+        );
+    }
 
     let case_details = match get_cases(&dir) {
         Ok(details) => details,
