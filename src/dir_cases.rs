@@ -45,8 +45,11 @@ fn slugify_path(p: &str) -> String {
     p.to_ascii_lowercase()
         .replace(' ', "_")
         .replace('.', "_")
+        .replace('-', "_")
         .replace('/', "_")
 }
+
+// fn has_correct_args() -> bool
 
 pub(crate) fn inner(args: TokenStream, input: TokenStream) -> TokenStream {
     let DirCases { span, dir } = parse_macro_input!(args as DirCases);
