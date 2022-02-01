@@ -1,7 +1,8 @@
+use crate::util::slugify_path;
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
-use std::fs::{read_dir, read_to_string};
+use std::fs::read_dir;
 use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input, parse_quote, Error, FnArg, ItemFn, LitStr, Type,
@@ -26,27 +27,28 @@ impl Parse for DirCases {
 
 fn get_cases(dir: &str) -> Result<Vec<(String, String, String)>, std::io::Error> {
     let mut cases = vec![];
+    let root = std::env::current_dir()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
 
     for entry in read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
         if path.is_file() {
-            let contents = read_to_string(path)?;
             let fname = entry.file_name().into_string().unwrap();
             let case = slugify_path(&fname);
-            cases.push((format!("{}/{}", dir, fname), case, contents));
+
+            cases.push((
+                format!("{}/{}", dir, fname),
+                format!("{}/{}/{}", root, dir, fname),
+                case,
+            ));
         }
     }
 
     Ok(cases)
-}
-
-fn slugify_path(p: &str) -> String {
-    p.to_ascii_lowercase()
-        .replace(' ', "_")
-        .replace('.', "_")
-        .replace('-', "_")
-        .replace('/', "_")
 }
 
 fn has_correct_args(_fn: &ItemFn) -> bool {
@@ -82,9 +84,9 @@ pub(crate) fn inner(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let case_attrs: Vec<_> = case_details
         .into_iter()
-        .map(|(path, case, contents)| {
+        .map(|(path, abs_path, case)| {
             quote! {
-                #[simple_test_case::test_case(#path, #contents; #case)]
+                #[simple_test_case::test_case(#path, include_str!(#abs_path); #case)]
             }
         })
         .collect();

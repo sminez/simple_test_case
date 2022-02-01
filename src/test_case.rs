@@ -1,3 +1,4 @@
+use crate::util::slugify_path;
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::{quote, ToTokens};
@@ -139,12 +140,8 @@ fn resolve_test_case(mut _fn: ItemFn, case: TestCase) -> proc_macro2::TokenStrea
     }
 }
 
-// assumes no non-alphanumeric characters and no leading digits
 fn slugify_ident(name: LitStr) -> Ident {
-    Ident::new(
-        &name.value().to_ascii_lowercase().replace(' ', "_"),
-        name.span(),
-    )
+    Ident::new(&slugify_path(&name.value()), name.span())
 }
 
 #[cfg(test)]

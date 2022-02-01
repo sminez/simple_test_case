@@ -177,6 +177,7 @@ use proc_macro::TokenStream;
 
 mod dir_cases;
 mod test_case;
+mod util;
 
 /// A simple parameterised test helper
 ///
@@ -188,10 +189,14 @@ pub fn test_case(args: TokenStream, input: TokenStream) -> TokenStream {
 
 /// Generate a set of parameterised tests based on the contents of a directory
 ///
-/// See the main module documentation for usage details.
+/// NOTE: The path given will be resolved relative to the root of your cargo workspace and the test
+/// function that you provide must accept to `&str` arguments: the path to the file loaded for the
+/// test case and the contents of that file. The files are read at compile time so
+/// adding/removing/modifying files in the given directory should trigger a recompile of your
+/// tests.
 ///
 /// ```ignore
-/// #[dir_cases("./resources/test_data")]
+/// #[dir_cases("resources/test_data")]
 /// #[test]
 /// fn example(path: &str, contents: &str) {
 ///   // ..
