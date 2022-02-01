@@ -1,6 +1,6 @@
 [package]
 name = "simple_test_case"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 authors = ["sminez <innes.andersonmorrison@gmail.com>"]
 license = "MIT"
@@ -17,9 +17,9 @@ categories    = ["development-tools", "development-tools::testing"]
 proc-macro = true
 
 [dependencies]
-proc-macro2 = "1.0.36"
-quote = "1.0.15"
-syn = { version = "1.0.86", features = ["full", "extra-traits"] }
+proc-macro2 = "^1.0"
+quote = "^1.0"
+syn = { version = "^1.0", features = ["full", "extra-traits"] }
 
 [dev-dependencies]
 anyhow = "1.0.53"
