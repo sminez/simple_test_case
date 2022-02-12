@@ -19,6 +19,15 @@ fn it_works(_path: &str, contents: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[dir_cases("tests/test_data", "tests/test_data_2")]
+#[test]
+fn it_works_with_multiple_dirs(_path: &str, contents: &str) -> anyhow::Result<()> {
+    let (n, expected) = parse_test_file(contents)?;
+
+    assert_eq!(double(n), expected);
+    Ok(())
+}
+
 #[dir_cases("tests/test_data")]
 #[tokio::test]
 async fn it_async_works(_path: &str, contents: &str) -> anyhow::Result<()> {

@@ -5,23 +5,23 @@ use quote::quote;
 use std::fs::read_dir;
 use syn::{
     parse::{Parse, ParseStream},
-    parse_macro_input, parse_quote, Error, FnArg, ItemFn, LitStr, Type,
+    parse_macro_input, parse_quote,
+    punctuated::Punctuated,
+    Error, FnArg, ItemFn, LitStr, Token, Type,
 };
 
 struct DirCases {
     span: Span,
-    dir: String,
+    dirs: Vec<String>,
 }
 
 impl Parse for DirCases {
     fn parse(input: ParseStream<'_>) -> syn::parse::Result<Self> {
         let span = input.span();
-        let dir: LitStr = input.parse()?;
+        let dirs: Punctuated<LitStr, Token![,]> = Punctuated::parse_separated_nonempty(input)?;
+        let dirs: Vec<String> = dirs.iter().map(|d| d.value()).collect();
 
-        Ok(Self {
-            span,
-            dir: dir.value(),
-        })
+        Ok(Self { span, dirs })
     }
 }
 
@@ -38,7 +38,7 @@ fn get_cases(dir: &str) -> Result<Vec<(String, String, String)>, std::io::Error>
         let path = entry.path();
         if path.is_file() {
             let fname = entry.file_name().into_string().unwrap();
-            let case = slugify_path(&fname);
+            let case = slugify_path(&format!("{}/{}", dir, fname));
 
             cases.push((
                 format!("{}/{}", dir, fname),
@@ -59,7 +59,7 @@ fn has_correct_args(_fn: &ItemFn) -> bool {
 }
 
 pub(crate) fn inner(args: TokenStream, input: TokenStream) -> TokenStream {
-    let DirCases { span, dir } = parse_macro_input!(args as DirCases);
+    let DirCases { span, dirs } = parse_macro_input!(args as DirCases);
     let original = parse_macro_input!(input as ItemFn);
 
     if !has_correct_args(&original) {
@@ -73,14 +73,19 @@ pub(crate) fn inner(args: TokenStream, input: TokenStream) -> TokenStream {
         );
     }
 
-    let case_details = match get_cases(&dir) {
-        Ok(details) => details,
-        Err(e) => {
-            return TokenStream::from(
-                Error::new(span, format!("Error loading test cases: {}", e)).into_compile_error(),
-            )
-        }
-    };
+    let mut case_details = Vec::new();
+
+    for dir in dirs.iter() {
+        match get_cases(dir) {
+            Ok(details) => case_details.extend(details),
+            Err(e) => {
+                return TokenStream::from(
+                    Error::new(span, format!("Error loading test cases: {}", e))
+                        .into_compile_error(),
+                )
+            }
+        };
+    }
 
     let case_attrs: Vec<_> = case_details
         .into_iter()
