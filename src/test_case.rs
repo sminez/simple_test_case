@@ -7,7 +7,7 @@ use syn::{
     parse_macro_input, parse_quote,
     punctuated::Punctuated,
     spanned::Spanned,
-    Attribute, Error, Expr, FnArg, ItemFn, LitStr, PatType, Result, Stmt, Token,
+    Attribute, Error, Expr, FnArg, ItemFn, LitStr, PatType, Path, Result, Stmt, Token,
 };
 
 // A really simple test case specification of the form: test_case(exprs, ...; "name for test case")
@@ -65,13 +65,13 @@ pub(crate) fn inner(args: TokenStream, input: TokenStream) -> TokenStream {
 // Glob up any other `test_case` attribute macros underneath us and parse them as additional
 // cases that we will handle generating.
 fn extract_other_cases(cases: &mut Vec<TestCase>, attrs: &[Attribute]) -> Result<Vec<usize>> {
-    let test_case_attr = parse_quote!(test_case);
-    let qualified_test_case_attr = parse_quote!(simple_test_case::test_case);
+    let test_case_attr: Path = parse_quote!(test_case);
+    let qualified_test_case_attr: Path = parse_quote!(simple_test_case::test_case);
 
     attrs
         .iter()
         .enumerate()
-        .filter(|(_, a)| a.path == test_case_attr || a.path == qualified_test_case_attr)
+        .filter(|(_, a)| a.path() == &test_case_attr || a.path() == &qualified_test_case_attr)
         .map(|(ix, a)| match a.parse_args::<TestCase>() {
             Ok(test_case) => {
                 cases.push(test_case);
