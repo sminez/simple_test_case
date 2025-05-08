@@ -187,21 +187,52 @@ pub fn test_case(args: TokenStream, input: TokenStream) -> TokenStream {
     test_case::inner(args, input)
 }
 
-/// Generate a set of parameterised tests based on the contents of a directory
+/// Generate a set of parameterised tests from files in present in a given directory.
 ///
-/// NOTE: The path given will be resolved relative to the root of your cargo workspace and the test
+/// The path(s) given will be resolved relative to the root of your cargo workspace and the test
 /// function that you provide must accept to `&str` arguments: the path to the file loaded for the
-/// test case and the contents of that file. The files are read at compile time so
-/// adding/removing/modifying files in the given directory should trigger a recompile of your
-/// tests.
+/// test case and the contents of that file. The files are read at compile time so in order for
+/// adding/removing/modifying files in the given directory to trigger a recompile of your
+/// tests you will need to set up a build.rs file using [rerun-if-changed][0].
 ///
+/// In its simplest use this macro will generate a test case for each file found in the given
+/// directory, providing the path and contents of that file as arguments to your test function.
+///
+/// # Example
+/// If we have the following directory contents:
+/// ```bash
+/// $ ls resources/my-test-data
+///   foo.txt
+///   bar-with-dashes.json
+///   baz_with_underscores.yaml
+/// ```
+///
+/// The the following test case will be expanded into three test cases:
 /// ```ignore
-/// #[dir_cases("resources/test_data")]
+/// #[dir_cases("resources/my-test-data")]
 /// #[test]
 /// fn example(path: &str, contents: &str) {
-///   // ..
+///   // your test logic using the contents of the file
 /// }
 /// ```
+///
+/// ```bash
+/// $ cargo test
+///   ...
+///   running 3 tests
+///   test example::foo ... ok
+///   test example::bar_with_dashes ... ok
+///   test example::baz_with_underscores ... ok
+///
+///   test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+/// ```
+///
+/// If you wish, you may specify a comma delimited list of directories to use for generating test
+/// cases instead of just a single directory. If you do, you will need to ensure that there are no
+/// duplicate filenames between the provided directories in order to avoid attempting to generate
+/// multiple tests with the same name.
+///
+///   [0]: https://doc.rust-lang.org/cargo/reference/build-scripts.html#rerun-if-changed
 #[proc_macro_attribute]
 pub fn dir_cases(args: TokenStream, input: TokenStream) -> TokenStream {
     dir_cases::inner(args, input)

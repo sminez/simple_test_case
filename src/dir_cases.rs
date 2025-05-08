@@ -2,13 +2,26 @@ use crate::util::slugify_path;
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
-use std::fs::read_dir;
+use std::{
+    collections::HashMap,
+    env::current_dir,
+    fs::read_dir,
+    io,
+    path::{Path, PathBuf},
+};
 use syn::{
-    parse::{Parse, ParseStream},
+    parse::{self, Parse, ParseStream},
     parse_macro_input, parse_quote,
     punctuated::Punctuated,
     Error, FnArg, ItemFn, LitStr, Token, Type,
 };
+
+const DUPLICATE_CASES_ERROR: &str = "\
+When using dir_cases with multiple directories you must ensure that all file
+names within the specified directories are unique.
+
+The following test cases are defined multiple times,
+";
 
 struct DirCases {
     span: Span,
@@ -16,7 +29,7 @@ struct DirCases {
 }
 
 impl Parse for DirCases {
-    fn parse(input: ParseStream<'_>) -> syn::parse::Result<Self> {
+    fn parse(input: ParseStream<'_>) -> parse::Result<Self> {
         let span = input.span();
         let dirs: Punctuated<LitStr, Token![,]> = Punctuated::parse_separated_nonempty(input)?;
         let dirs: Vec<String> = dirs.iter().map(|d| d.value()).collect();
@@ -25,24 +38,36 @@ impl Parse for DirCases {
     }
 }
 
-fn get_cases(dir: &str) -> Result<Vec<(String, String, String)>, std::io::Error> {
-    let mut cases = vec![];
-    let root = std::env::current_dir()
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
+fn get_cases(str_dir: &str, root: &Path) -> Result<Vec<(String, String, String)>, io::Error> {
+    let dir = PathBuf::from(str_dir);
+    if !dir.exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("{str_dir} is not a known directory"),
+        ));
+    }
 
-    for entry in read_dir(dir)? {
+    let mut cases = Vec::new();
+
+    for entry in read_dir(&dir)? {
         let entry = entry?;
         let path = entry.path();
         if path.is_file() {
-            let fname = entry.file_name().into_string().unwrap();
-            let case = slugify_path(&format!("{}/{}", dir, fname));
+            let os_fname = entry.file_name();
+            let fname = os_fname.to_string_lossy();
+            let case = if entry.path().extension().is_some() {
+                let (without_ext, _) = fname
+                    .rsplit_once('.')
+                    .expect("extension was Some so we have a dot");
+                slugify_path(without_ext)
+            } else {
+                slugify_path(&fname)
+            };
 
+            let rel_path = dir.join(fname.as_ref());
             cases.push((
-                format!("{}/{}", dir, fname),
-                format!("{}/{}/{}", root, dir, fname),
+                rel_path.display().to_string(),
+                root.join(rel_path).display().to_string(),
                 case,
             ));
         }
@@ -66,27 +91,60 @@ pub(crate) fn inner(args: TokenStream, input: TokenStream) -> TokenStream {
         return TokenStream::from(
             Error::new(
                 span,
-                "dir_cases test functions must accept (path: &str, contents: &str) as arguments"
-                    .to_string(),
+                "dir_cases test functions must accept (path: &str, contents: &str) as arguments",
             )
             .into_compile_error(),
         );
     }
 
+    let root = match current_dir() {
+        Ok(root) => root,
+        Err(e) => {
+            return TokenStream::from(
+                Error::new(span, format!("Unable to determine working directory: {e}"))
+                    .into_compile_error(),
+            );
+        }
+    };
     let mut case_details = Vec::new();
 
     for dir in dirs.iter() {
-        match get_cases(dir) {
+        match get_cases(dir, &root) {
             Ok(details) => case_details.extend(details),
             Err(e) => {
                 return TokenStream::from(
-                    Error::new(span, format!("Error loading test cases: {}", e))
-                        .into_compile_error(),
+                    Error::new(span, format!("Error loading test cases: {e}")).into_compile_error(),
                 )
             }
         };
     }
 
+    // Try to give a nicer error message around duplicated test case names when the user provided
+    // multiple directories and the same file name was present more than once.
+    let mut seen: HashMap<&String, Vec<&String>> = HashMap::new();
+    for (rel_path, _, case) in case_details.iter() {
+        seen.entry(case).or_default().push(rel_path);
+    }
+    seen.retain(|_, paths| paths.len() > 1);
+    if !seen.is_empty() {
+        let duplicate_cases: Vec<String> = seen
+            .into_iter()
+            .map(|(case, rel_paths)| {
+                let paths: Vec<String> = rel_paths.into_iter().map(|s| format!("  {s}")).collect();
+                format!("{case}:\n{}", paths.join("\n"))
+            })
+            .collect();
+
+        return TokenStream::from(
+            Error::new(
+                span,
+                format!("{DUPLICATE_CASES_ERROR}\n{}", duplicate_cases.join("\n\n")),
+            )
+            .into_compile_error(),
+        );
+    }
+
+    // If we're all good, write out the test cases by deferring to the test_case macro
     let case_attrs: Vec<_> = case_details
         .into_iter()
         .map(|(path, abs_path, case)| {
