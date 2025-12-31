@@ -1,8 +1,20 @@
 pub(crate) fn slugify_path(p: &str) -> String {
+    let mut last_underscore = false;
     let mut s: String = p
         .to_ascii_lowercase()
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .filter_map(move |c| match c {
+            '_' if last_underscore => None,
+            '_' => {
+                last_underscore = true;
+                Some('_')
+            }
+            c => {
+                last_underscore = false;
+                Some(c)
+            }
+        })
         .collect();
 
     if s.starts_with(|c: char| c.is_numeric()) {
@@ -15,6 +27,11 @@ pub(crate) fn slugify_path(p: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn multi_space() {
+        assert_eq!(&slugify_path("  lots  of  spaces  "), "_lots_of_spaces_")
+    }
 
     #[test]
     fn space_delimited() {
